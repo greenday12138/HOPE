@@ -14,3 +14,4 @@ cache/
 *.txt
 *.log
 *.ipynb
+detector/yolov5/my_mcmt_old.py

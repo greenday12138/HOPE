@@ -117,7 +117,7 @@ def attempt_load(weights, map_location=None):
     for w in weights if isinstance(weights, list) else [weights]:
         print('w: weights: ', w)
         # attempt_download(w)
-        Yolo_path='/mnt/c/Users/83725/Desktop/AIC21-MTMC/detector/yolov5/'
+        Yolo_path='detector/yolov5/weights'
         weight = Yolo_path + w 
         model.append(torch.load(weight, map_location=map_location)['model'].float().fuse().eval())  # load FP32 model
 

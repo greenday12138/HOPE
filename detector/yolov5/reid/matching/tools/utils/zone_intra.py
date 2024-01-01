@@ -12,7 +12,7 @@ class zone():
         # w r 非高速
         # b g 高速
         zones = {}
-        zone_path = "/mnt/c/Users/83725/Desktop/AIC21-MTMC/detector/yolov5/reid/matching/tools/zone"
+        zone_path = "detector/yolov5/reid/matching/tools/zone"
         for img_name in os.listdir(zone_path):
             camnum = int(img_name.split('.')[0][-3:])
             zone_img = cv2.imread(opj(zone_path, img_name))

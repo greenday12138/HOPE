@@ -6,7 +6,8 @@ import pickle
 import os
 import logging
 import sys
-sys.path.append('../../')
+sys.path.append(os.getcwd())
+# print(os.getcwd())
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
@@ -29,15 +30,15 @@ from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, get_gpu_mem_info, get_cpu_mem_info
 from reid.reid_inference.reid_model import build_reid_model
 
-
-
 # Namespace(agnostic_nms=True, augment=False, cfg_file='aic_all.yml', 
 # classes=[2, 5, 7], conf_thres=0.1, device='', exist_ok=False, img_size=1280, 
 # iou_thres=0.45, name='c041', project='/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/detect_merge/', 
 # save_conf=True, save_txt=True, source='/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/detection/images/test/S06//c041/img1/', 
 # update=False, view_img=False, weights=['yolov5s.pt'])
 
-logging.basicConfig(filename='12.31.detect_result.log', level=logging.INFO, format='%(asctime)s - %(message)s')
+formatted_date = time.strftime("%Y-%m-%d", time.localtime())
+log_name = f'town5/{formatted_date}_detect_res.log'
+logging.basicConfig(filename=log_name, level=logging.INFO, format='%(asctime)s - %(message)s')
 
 global GPU_ID
 GPU_ID = 0
@@ -48,56 +49,52 @@ min_confidence =  0.1 # 置信度
 g_tid = 0
 
 # 通过当前轨迹的cam和最后一帧zone_num，找到其应当存在哪个cam的哪个区域的待匹配队列中
-next_cams_zone = {'c001':{1:[], 2:[], 3:[], 4:[['c002',3]]},
-                  'c002':{1:[], 2:[['c001',4],['c003',2],['c003',2],['c005',3]], 3:[['c001',4],['c002',2]], 4:['c003',3]},
-                  'c003':{1:[], 2:[], 3:['c002',4], 4:['c004',3]},
-                  'c004':{1:[], 2:[], 3:['c003',4], 4:['c005',3]},
-                  'c005':{1:[], 2:[], 3:['c004',4], 4:[]}}
+next_cams_zone = {'c001':{1:[['c002',1],['c003',1],['c004',1],['c005',1]], 
+                          2:[['c005',2]], 
+                          3:[], 
+                          4:[['c002',3]]},
+                  'c002':{1:[['c001',1],['c003',1],['c004',1],['c005',1]], 
+                          2:[['c001',4],['c003',2],['c004',2],['c005',3]],
+                          3:[['c001',4],['c002',2],['c003',2],['c004',2],['c005',3]], 
+                          4:[['c003',3]]},
+                  'c003':{1:[['c001',1],['c002',1],['c004',1],['c005',1]], 
+                          2:[['c001',4],['c002',2],['c004',2],['c005',3]], 
+                          3:[['c002',4]], 
+                          4:[['c004',3]]},
+                  'c004':{1:[['c001',1],['c002',1],['c003',1],['c005',1]], 
+                          2:[['c001',4],['c002',2],['c003',2],['c005',3]], 
+                          3:[['c003',4]], 
+                          4:[['c005',3]]},
+                  'c005':{1:[['c001',1],['c002',1],['c003',1],['c004',1]], 
+                          2:[['c001',2]], 
+                          3:[['c001',4],['c002',2],['c003',2],['c004',2],['c004',4]], 
+                          4:[]}}
 # key1摄像头, key2为start_zone, 即该轨迹只能从这个zone邻接的摄像头中寻找匹配轨迹
 # 1 白色 2 红色 3 绿色 4 蓝色
+
+# 通过当前轨迹的起始zone, 定位到需要进行跨视频匹配的轨迹列表
+# 再基于out_time二分查找，快速定位到最可能匹配的位置，向两侧匹配，直至超过规定值
 Track_to_be_matched = {'c001':{1:[], 2:[], 3:[], 4:[]},
                        'c002':{1:[], 2:[], 3:[], 4:[]},
                        'c003':{1:[], 2:[], 3:[], 4:[]},
                        'c004':{1:[], 2:[], 3:[], 4:[]},
                        'c005':{1:[], 2:[], 3:[], 4:[]}}
 # c001 4表示 区域4邻接的摄像头到c001的时间差，即c002的区域3的out_time - c001的区域4的in_time
-avg_times = {'c001':{4:22.8},
-            'c002':{3:15.0, 4:49.3},
-            'c003':{3:52.6, 4:27.8},
-            'c004':{3:50.3, 4:2.8},
-            'c005':{3:33.4}}
-
-# 通过当前轨迹的起始zone, 定位到需要进行跨视频匹配的轨迹列表
-# 再基于out_time二分查找，快速定位到最可能匹配的位置，向两侧匹配，直至超过规定值
+avg_times = {'c001':{1:0.0, 2:0.0, 4:22.8},
+             'c002':{1:0.0, 2:0.0, 3:15.0, 4:49.3},
+             'c003':{1:0.0, 2:0.0, 3:52.6, 4:27.8},
+             'c004':{1:0.0, 2:0.0, 3:50.3, 4:2.8},
+             'c005':{1:0.0, 2:0.0, 3:33.4}}
 
 def cfg_extract():
     cfg = CfgNode()
-    cfg.DET_SOURCE_DIR= '/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/detection/images/test/S06/'
-    cfg.REID_MODEL= '/mnt/c/Users/83725/Desktop/AIC21-MTMC/detector/yolov5/reid/reid_model/resnet101_ibn_a_2.pth'
+    cfg.REID_MODEL= 'detector/yolov5/reid/reid_model/resnet101_ibn_a_2.pth'
     cfg.REID_BACKBONE= 'resnet101_ibn_a'
-    cfg.DET_IMG_DIR= '/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/detect_merge/'
-    cfg.DATA_DIR= '/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/detect_reid1/'
     cfg.REID_SIZE_TEST= [384, 384]
     cfg.freeze()
     return cfg
 
-def cfg_mot():
-    mot_cfg = CfgNode()
-    mot_cfg.CHALLENGE_DATA_DIR= '/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/AIC22_Track1_MTMC_Tracking/'
-    mot_cfg.DET_SOURCE_DIR= '/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/detection/images/train/S09/'
-    mot_cfg.DATA_DIR= '/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/detect_merge/'
-    mot_cfg.REID_SIZE_TEST= [384, 384]    # 384, 256
-    mot_cfg.ROI_DIR= '/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/AIC22_Track1_MTMC_Tracking/train/S09/'
-    mot_cfg.CID_BIAS_DIR= '/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/AIC22_Track1_MTMC_Tracking/cam_timestamp/'
-    mot_cfg.USE_RERANK= True
-    mot_cfg.USE_FF= True
-    mot_cfg.SCORE_THR= 0.1
-    mot_cfg.MCMT_OUTPUT_TXT= 'track3.txt'
-    mot_cfg.freeze()
-    return mot_cfg
-
 extract_cfg = cfg_extract()
-mot_cfg = cfg_mot()
 
 def cal_similarity(vector1,vector2):
     dot_product = np.dot(vector1, vector2)
@@ -387,28 +384,21 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
     results = {}           # key是cam，value是list
     pp_results = {}        # key是cam，value是list
     trackers_avg_feat = {} # key是cam，value是字典，该字典key是tid，value是平均特征向量
-
     gt_detect = {}  # 检测输出的gt
     gt_dict = {}    # 自带的gt
-    
+    frame_nums = {}
 
     for cam in cams:
         video_dir = os.path.join(cams_dir, cam) + '/vdo.mp4'
         gt_dir = os.path.join(cams_dir, cam) + '/gt/gt.txt'
         gt_dict[cam] = read_data_from_txt(gt_dir)
         gt_detect[cam] = {}
+        frame_nums[cam] = []
         datasets[cam] = LoadImages(video_dir, img_size=imgsz, stride=stride)
         results[cam] = []
         pp_results[cam] = []
         trackers[cam] = JDETracker(min_confidence, vdo_frame_ratio)
         trackers_avg_feat[cam] = {}
-
-    # image_dict_total = {}
-    # extract_output = {} # {string: np.array}
-    # det_feat_dict = {}
-        
-    # dataset = LoadImages(source, img_size=imgsz, stride=stride)
-    # dataset = LoadStreams(source, img_size=imgsz, stride=stride)
 
     # names存的是目标检测结果的种类，检测[2,5,7](car,bus,truck)
     names = det_model.module.names if hasattr(det_model, 'module') else det_model.names
@@ -431,7 +421,6 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
         # 轮流处理每个摄像头的每一帧
         for cam_idx,cam in enumerate(cams):
             # gt文件写路径
-            gt_write = "town5/" + cam + "_gt_test.txt"
             current_dict = dict()
             # 保存crop后的图像
             current_image_dict = dict()
@@ -451,8 +440,6 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
                 pred = det_model(img, augment=False)[0]
                 # 去除检测结果中冗余的边界框
                 pred = non_max_suppression(pred, conf_thres, iou_thres, classes=[2, 5, 7], agnostic=True)
-                # t2 = time_synchronized()
-                # print("推理耗时：{}s".format(round(t2 - t1, 5)))
                 # 处理推理结果
                 for i, det in enumerate(pred):
                     # 传入的是图片，dataset没有frame属性，frame=0
@@ -472,12 +459,10 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
                         for c in det[:, -1].unique():
                             n = (det[:, -1] == c).sum()  # detections per class
                             s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                        # print("s 为{}".format(s))
                         det_num = 0 #  局部id
                         for *xyxy, conf, cls in reversed(det):
                             x1,y1,x2,y2 = tuple(torch.tensor(xyxy).view(4).tolist())
                             x1,y1,x2,y2 = int(x1),int(y1),int(x2),int(y2)
-                            # print("x1:%d, y1:%d, x2:%d, y2:%d" % (x1,y1,x2,y2))
                             # shape返回 [高度, 宽度, 通道数]
                             if x1 < 0 or y1 < 0 or x2 > im0.shape[1]-1  or y2 > im0.shape[0]-1:
                                 # print('clip bbox')
@@ -501,8 +486,9 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
                             det_num += 1
                 t2 = time_synchronized()
                 total_detect_time += (t2 - t1)
-                # 能返回每帧的目标数
-                logging.info(f"检测目标个数：{cam},{frame_idx},{det_num}")
+                # 记录每帧的目标数
+                frame_nums[cam].append([frame_idx, det_num])
+
                 # 完成某个单视频的第n帧检测
                 # current_image_dict中存有当前帧的车辆图片信息
                 # current_dict中存有当前帧的bbox等信息
@@ -521,10 +507,6 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
                 cur_det_feat_dict[det_name]['feat'] = current_feat_dict[det_name]
             t4 = time_synchronized()
             total_extract_time += (t4 - t3)
-            # print("特征提取耗时：{}".format(t4 - t3))
-            # extract_output.update(current_feat_dict)
-            # image_dict_total.update(current_image_dict)
-            # det_feat_dict.update(cur_det_feat_dict)
 
             # 单视频追踪
             t5 = time_synchronized()
@@ -551,9 +533,7 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
                 tlwh = t.det_tlwh
                 tid = t.track_id
                 score = t.score
-                #feature = t.smooth_feat
                 feature = t.features[-1]
-                #vertical = tlwh[2] / tlwh[3] > 1.6
                 feature = t.smooth_feat
                 image_name = f'{cam}_{tid}_{frame_idx}'
                 if tlwh[2] * tlwh[3] > 750:
@@ -575,13 +555,9 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
                 pp_results[cam].append(dummpy_input)
             pp_results[cam] = np.array(pp_results[cam])
             # 执行后处理
-            # loaded_trk_ids = np.unique(pp_results[cam][:, 1])
-            # 把轨迹片段关联，相似度阈值0.1，从第10列开始计算相似度
-            pp_results[cam] = associate(pp_results[cam], 0.1, 10, cam)
             # pp_results[cam] = associate(pp_results[cam], 0.1, 10, cam)
             pp_results[cam] = track_nms(pp_results[cam], 0.65)
-            # trk_ids = np.unique(pp_results[cam][:, 1])
-            # print('after all PP, merging ', len(loaded_trk_ids) - len(trk_ids), ' tracks')
+
             cid = int(cam[-3:])
             zones.set_cam(cid)
             mot_feat_dic = {}
@@ -626,39 +602,32 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
                     
                     start_zone = zone_list[0]
                     end_zone = zone_list[-1]
-                    next_cam = ''
+                    next_area = []
                     matched_tid = -1
                     # 与邻近摄像头中的轨迹进行跨视频匹配
-                    if (start_zone == 3 or start_zone == 4): # 起始区域为0，1，2，则必为新轨迹
+                    if start_zone: # 起始区域为0，则必为新轨迹
                         matched_tid = cross_cam_match(cam, start_zone, io_time, mean_feat)
-                        if (end_zone == 3 or end_zone == 4):
-                            next_cam, next_zone = next_cams_zone[cam][end_zone]
+                        if end_zone:
+                            next_area = next_cams_zone[cam][end_zone]
 
-                    if next_cam:
-                        Track_to_be_matched[next_cam][next_zone].append([io_time[1], matched_tid, mean_feat])
+                    for next_cam, next_zone  in next_area:
+                        # 可能匹配轨迹格式[out_time, g_tid, mean_feat, is_matched, tid, similarity]
+                        Track_to_be_matched[next_cam][next_zone].append([io_time[1], matched_tid, mean_feat, False, -1, -1])
 
                     if matched_tid != -1:
                         gt_detect[cam][matched_tid] = {}
-                        with open(gt_write, "a") as file:
-                            for i in frame_list:
-                                file.write(f"{i},{matched_tid},{int(mot_list[tid][i]['bbox'][0])},{int(mot_list[tid][i]['bbox'][1])},{int(mot_list[tid][i]['bbox'][2] - mot_list[tid][i]['bbox'][0])},{int(mot_list[tid][i]['bbox'][3] - mot_list[tid][i]['bbox'][1])},1,3,-1,-1\n")                            
-                                gt_detect[cam][matched_tid][i] = [int(mot_list[tid][i]['bbox'][0]),int(mot_list[tid][i]['bbox'][1]),
-                                                        int(mot_list[tid][i]['bbox'][2] - mot_list[tid][i]['bbox'][0]), 
-                                                        int(mot_list[tid][i]['bbox'][3] - mot_list[tid][i]['bbox'][1])]
-                            # logging.info(f"ground_truth:{cam},{tid},{i},{cur_gtid},
-                            #              {mot_list[tid][i]['bbox'][0]},{mot_list[tid][i]['bbox'][1]},
-                            #              {mot_list[tid][i]['bbox'][2] - mot_list[tid][i]['bbox'][0]},
-                            #              {mot_list[tid][i]['bbox'][3] - mot_list[tid][i]['bbox'][1]},1,-1,-1,-1")
-
+                        for i in frame_list:                  
+                            gt_detect[cam][matched_tid][i] = [int(mot_list[tid][i]['bbox'][0]),int(mot_list[tid][i]['bbox'][1]),
+                                                    int(mot_list[tid][i]['bbox'][2] - mot_list[tid][i]['bbox'][0]), 
+                                                    int(mot_list[tid][i]['bbox'][3] - mot_list[tid][i]['bbox'][1])]
 
                     trackers_avg_feat[cam][tid] = {
                         'g_tid' : matched_tid,
                         'io_time': io_time,
                         'zone_list': zone_list,
                         'frame_list': frame_list,
-                        'tid': tid,
                         'mean_feat': mean_feat,
-                        'tracklet': tracklet
+                        # 'tracklet': tracklet
                     }
             t10 = time_synchronized()
             total_match_time += (t10 - t9)
@@ -670,29 +639,24 @@ def run_mtmc(cams_dir = 'datasets/AIC22_Track1_MTMC_Tracking/train/S10',
     # end while
     print('done')
 
+    for cam in cams:
+        gt_write = "town5/" + cam + "_gt_test.txt"
+        detnum_write = "town5/" + cam + "_detnum.txt"
+        with open(gt_write, "a") as gt_file:
+            for gid, v in gt_detect[cam].items():
+                for fid, bbox in v.items():
+                    gt_file.write(f'{fid},{gid},{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]},1,3,-1,-1\n')
+
+        with open(detnum_write, "w") as detnum_file:
+            # 写每帧检测目标的数量
+            for row in frame_nums[cam]:
+                detnum_file.write(f'{row[0]},{row[1]}\n')
+            
     with open('metrics.txt', "a") as result_file:
         for cam in cams:
             precision, recall, f1 = mot_metrics(gt_detect[cam], gt_dict[cam])
             result_file.write(f"{cam}的评估指标: IDP={round(precision*100, 3)}%, IDR={round(recall*100,3)}%, IDF1={round(f1,3)}%\n")
         result_file.write(f"目标检测总耗时:{total_detect_time},\n特征提取总耗时:{total_extract_time},\n单视频追踪总耗时:{total_sct_time},\n后处理总耗时:{total_pp_time},\n跨视频匹配总耗时:{total_match_time}")
-
-        
-    # 返回gt list
-    # 返回每步的总耗时，累加
-
-    # print("extract_output的长度为{}".format(len(extract_output)))
-    # 输出特征提取结果
-    # for feat_name, feat in extract_output.items():
-    #     print(f"{feat_name} : {feat}")
-    # 输出六个视频中检测到的所有车辆图片
-    # for _, crop_img in image_dict_total.items():
-    #     # img_pil = Image.fromarray(crop_img)
-    #     # print(img_pil.mode)
-    #     cv2.imshow('show img', crop_img)
-    #     cv2.waitKey(0)
-    # 输出六个视频中检测到的所有车辆信息
-    # for car, value in out_dict.items():
-    #     print(f"{car}: {value}")
 
 
 if __name__ == '__main__':
