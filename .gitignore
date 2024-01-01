@@ -1,8 +1,16 @@
 __pycache__/
 exp/
+datasets/
+.idea/
+.vscode/
+cache/
 *.mp4
 *.avi
 *.pt
 *.pth
 *.png
 *.pkl
+*.jpg
+*.txt
+*.log
+*.ipynb

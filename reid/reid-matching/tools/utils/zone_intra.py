@@ -175,20 +175,20 @@ class zone():
         # if not cid in [41,44,45,46]:
         #     return mot_list
         new_mot_list = dict()
-        new_num_tracklets = max(mot_list)+1
+        new_num_tracklets = max(mot_list)+1 # 取tid最大值+1
         for tracklet in mot_list:
             tracklet_dict = mot_list[tracklet]
-            frame_list = list(tracklet_dict.keys())
+            frame_list = list(tracklet_dict.keys()) # tracklet_dict的键是fid
             frame_list.sort()
             zone_list = []
             back_tracklet = False
             new_zone_f = 0
-            pre_frame = frame_list[0]
+            pre_frame = frame_list[0] # 当前遍历到的帧号
             time_break = False
             # if tracklet == 714:
             #     print(tracklet)
             for f in frame_list:
-                if f-pre_frame>100:
+                if f-pre_frame>100:  # 时间差大于100帧，间隔过大，可能是另一辆车，则发生分裂
                     if cid in [44,45]:
                         time_break = True
                         break
@@ -205,6 +205,7 @@ class zone():
                     new_zone_f=0
                 else:
                     new_zone_f+=1
+            # 如果目标在某一帧的位置与前一帧不一致，而且新目标至少有15帧的历史记录，则发生分裂
             if back_tracklet:
                 new_tracklet_dict = dict()
                 pre_bbox = -1

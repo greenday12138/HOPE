@@ -551,4 +551,8 @@ def increment_path(path, exist_ok=True, sep=''):
         matches = [re.search(rf"%s{sep}(\d+)" % path.stem, d) for d in dirs]
         i = [int(m.groups()[0]) for m in matches if m]  # indices
         n = max(i) + 1 if i else 2  # increment number
+        print('increment_path', dirs)
+        print('increment_path', matches)
+        print('increment_path', i)
+        print('increment_path', n)
         return f"{path}{sep}{n}"  # update path

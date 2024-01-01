@@ -1,0 +1,20 @@
+Collecting pycocotools
+  Obtaining dependency information for pycocotools from https://files.pythonhosted.org/packages/85/1a/f3f95a5c994be2b554f370ac314b034d43d82c69be3fd40fabed5cfd5347/pycocotools-2.0.7-cp38-cp38-win_amd64.whl.metadata
+  Downloading pycocotools-2.0.7-cp38-cp38-win_amd64.whl.metadata (1.1 kB)
+Requirement already satisfied: matplotlib>=2.1.0 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from pycocotools) (3.7.1)
+Requirement already satisfied: numpy in d:\miniconda\envs\videodb_3.8\lib\site-packages (from pycocotools) (1.24.3)
+Requirement already satisfied: contourpy>=1.0.1 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from matplotlib>=2.1.0->pycocotools) (1.0.5)
+Requirement already satisfied: cycler>=0.10 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from matplotlib>=2.1.0->pycocotools) (0.11.0)
+Requirement already satisfied: fonttools>=4.22.0 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from matplotlib>=2.1.0->pycocotools) (4.25.0)
+Requirement already satisfied: kiwisolver>=1.0.1 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from matplotlib>=2.1.0->pycocotools) (1.4.4)
+Requirement already satisfied: packaging>=20.0 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from matplotlib>=2.1.0->pycocotools) (23.0)
+Requirement already satisfied: pillow>=6.2.0 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from matplotlib>=2.1.0->pycocotools) (9.4.0)
+Requirement already satisfied: pyparsing>=2.3.1 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from matplotlib>=2.1.0->pycocotools) (3.0.9)
+Requirement already satisfied: python-dateutil>=2.7 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from matplotlib>=2.1.0->pycocotools) (2.8.2)
+Requirement already satisfied: importlib-resources>=3.2.0 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from matplotlib>=2.1.0->pycocotools) (5.2.0)
+Requirement already satisfied: zipp>=3.1.0 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from importlib-resources>=3.2.0->matplotlib>=2.1.0->pycocotools) (3.11.0)
+Requirement already satisfied: six>=1.5 in d:\miniconda\envs\videodb_3.8\lib\site-packages (from python-dateutil>=2.7->matplotlib>=2.1.0->pycocotools) (1.16.0)
+Downloading pycocotools-2.0.7-cp38-cp38-win_amd64.whl (85 kB)
+   ---------------------------------------- 85.3/85.3 kB 600.2 kB/s eta 0:00:00
+Installing collected packages: pycocotools
+Successfully installed pycocotools-2.0.7

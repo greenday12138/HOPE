@@ -121,6 +121,7 @@ class _RepeatSampler(object):
 
 class LoadImages:  # for inference
     def __init__(self, path, img_size=640, stride=32):
+        # ��ȡ����·��
         p = str(Path(path).absolute())  # os-agnostic absolute path
         if '*' in p:
             files = sorted(glob.glob(p, recursive=True))  # glob
@@ -134,7 +135,8 @@ class LoadImages:  # for inference
         images = [x for x in files if x.split('.')[-1].lower() in img_formats]
         videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
         ni, nv = len(images), len(videos)
-
+        # 设置roi图片路径
+        self.roi_path = str(Path(path[:-7] + 'roi.jpg'))
         self.img_size = img_size
         self.stride = stride
         self.files = images + videos
@@ -160,6 +162,7 @@ class LoadImages:  # for inference
         if self.video_flag[self.count]:
             # Read video
             self.mode = 'video'
+            # ret_val是bool类型，True则成功读取一帧图像
             ret_val, img0 = self.cap.read()
             if not ret_val:
                 self.count += 1
@@ -180,7 +183,9 @@ class LoadImages:  # for inference
             img0 = cv2.imread(path)  # BGR
             assert img0 is not None, 'Image Not Found ' + path
             print(f'image {self.count}/{self.nf} {path}: ', end='')
-
+        # 引入roi
+        ignor_region = cv2.imread(self.roi_path)
+        img0 = img0 * (ignor_region>0)
         # Padded resize
         img = letterbox(img0, self.img_size, stride=self.stride)[0]
 

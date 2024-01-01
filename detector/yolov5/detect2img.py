@@ -1,3 +1,4 @@
+
 import argparse
 import time
 from pathlib import Path
@@ -15,8 +16,9 @@ from utils.datasets import LoadStreams, LoadImages
 from utils.general import check_img_size, check_requirements, non_max_suppression, apply_classifier, \
     xyxy2xywh, strip_optimizer, set_logging, increment_path
 from utils.plots import plot_one_box
-from utils.torch_utils import select_device, load_classifier, time_synchronized
+from utils.torch_utils import select_device, load_classifier, time_synchronized, get_gpu_mem_info, get_cpu_mem_info
 import sys
+import os
 sys.path.append('../../')
 from config import cfg
 
@@ -41,22 +43,38 @@ def detect(save_img=False):
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://'))
 
+
     # Directories
-    save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
+    # opt.exist_ok定义在哪儿？
+    save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run, �൱�ڶ�ÿ�����еĽ��������һ���ļ��У�����exp1, exp2...
     (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
 
+
+
+    cpu_mem_total, cpu_mem_free, cpu_mem_process_used = get_cpu_mem_info()
+    print(r'1当前机器内存使用情况：总共 {} MB， 剩余 {} MB, 当前进程使用的内存 {} MB'
+           .format(cpu_mem_total, cpu_mem_free, cpu_mem_process_used))
     # Initialize
     set_logging()
+    #'--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu'
     device = select_device(opt.device)
+    print('used device: ', device)
     half = device.type != 'cpu'  # half precision only supported on CUDA
-
+    gpu_mem_total, gpu_mem_used, gpu_mem_free = get_gpu_mem_info(gpu_id=GPU_ID)
+    print(r'1当前显卡显存使用情况：总共 {} MB， 已经使用 {} MB， 剩余 {} MB'
+          .format(gpu_mem_total, gpu_mem_used, gpu_mem_free))
     # Load model
+    print('weights: ', weights)
     model = attempt_load(weights, map_location=device)  # load FP32 model
+    gpu_mem_total, gpu_mem_used, gpu_mem_free = get_gpu_mem_info(gpu_id=GPU_ID)
+    print(r'2当前显卡显存使用情况：总共 {} MB， 已经使用 {} MB， 剩余 {} MB'
+          .format(gpu_mem_total, gpu_mem_used, gpu_mem_free))
+    
+    # 调整imgsz，保证是stride的整数倍
     stride = int(model.stride.max())  # model stride
     imgsz = check_img_size(imgsz, s=stride)  # check img_size
     if half:
         model.half()  # to FP16
-
     # Second-stage classifier
     classify = False
     if classify:
@@ -65,40 +83,52 @@ def detect(save_img=False):
 
     # Set Dataloader
     vid_path, vid_writer = None, None
+    # download images from web
     if webcam:
         view_img = True
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz, stride=stride)
     else:
         save_img = True
+        # source = '/mnt/c/Users/83725/Desktop/AIC21-MTMC/datasets/detection/images/test/S06/c041/img1'
         dataset = LoadImages(source, img_size=imgsz, stride=stride)
-
+    # dataset是可迭代对象，返回元素为 path, img, img0, self.cap
+    # 由于传入的是纯图片，self.cap = None
     out_dict=dict()
 
+    # cpu_mem_total, cpu_mem_free, cpu_mem_process_used = get_cpu_mem_info()
+    # print(r'2当前机器内存使用情况：总共 {} MB， 剩余 {} MB, 当前进程使用的内存 {} MB'
+    #       .format(cpu_mem_total, cpu_mem_free, cpu_mem_process_used))
     # Get names and colors
     names = model.module.names if hasattr(model, 'module') else model.names
+    # 随机生成RGB值
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
+    gpu_mem_total, gpu_mem_used, gpu_mem_free = get_gpu_mem_info(gpu_id=GPU_ID)
 
     # Run inference
     if device.type != 'cpu':
+        print('imgsz: ', imgsz)
+        # model(torch.zeros(1, 3, imgsz, imgsz).to(device))
         model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
     t0 = time.time()
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
+        # 确保维度正确
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
 
         # Inference
         t1 = time_synchronized()
+    
         pred = model(img, augment=opt.augment)[0]
-
-        # Apply NMS
+        # 去除检测结果中冗余的边界框
         pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
         t2 = time_synchronized()
 
         # Apply Classifier
+        # classify = False
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
 
@@ -108,7 +138,6 @@ def detect(save_img=False):
                 p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count
             else:
                 p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
-
             p = Path(p)  # to Path
             save_path = str(save_dir / 'dets_debug' / p.name)  # img.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
@@ -136,9 +165,9 @@ def detect(save_img=False):
                     if x1 < 0 or y1 < 0 or x2 > im0.shape[1]-1  or y2 > im0.shape[0]-1:
                         # print('clip bbox')
                         continue
-                    # if (y2-y1) * (x2-x1) < 1000:    # TODO: filter small bboxes
-                    #     # print('det too small')
-                    #     continue
+                    if (y2-y1) * (x2-x1) < 1000:    # TODO: filter small bboxes
+                        # print('det too small')
+                        continue
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
@@ -154,6 +183,7 @@ def detect(save_img=False):
                         det_img_path = det_path+"_{:0>3d}.png".format(det_num)
                         det_class = int(cls.tolist())
                         det_conf = conf.tolist()
+                        # 将检测到的车辆crop之后保存成图像，文件名为 图片名+第几辆车， dets路径下
                         cv2.imwrite(det_img_path,img_det[y1:y2,x1:x2])
                         out_dict[det_name] = {
                             'bbox': (x1,y1,x2,y2),
@@ -188,12 +218,14 @@ def detect(save_img=False):
                         fps = vid_cap.get(cv2.CAP_PROP_FPS)
                         w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                         h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        # det_debug路径下
                         vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
                     vid_writer.write(im0)
 
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         print(f"Results saved to {save_dir}{s}")
+        # 保存所有crop出来的车辆的信息
         pickle.dump(out_dict,open(str(save_dir / '{}_dets.pkl'.format(opt.name)),'wb'))
 
     print(f'Done. ({time.time() - t0:.3f}s)')
@@ -207,13 +239,13 @@ if __name__ == '__main__':
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view-img', action='store_true', help='display results')
+    parser.add_argument('--view-img', default=False, help='display results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
-    parser.add_argument('--augment', action='store_true', help='augmented inference')
-    parser.add_argument('--update', action='store_true', help='update all models')
+    parser.add_argument('--augment', default=False, help='augmented inference')
+    parser.add_argument('--update', default=False, help='update all models')
     parser.add_argument('--project', default='runs/detect', help='save results to project/name')
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
@@ -223,13 +255,15 @@ if __name__ == '__main__':
     cfg.freeze()
     opt.source = f'{cfg.DET_SOURCE_DIR}/{opt.name}/img1/'
     opt.project = cfg.DATA_DIR
+    global GPU_ID
+    GPU_ID = 0
     print(opt)
     check_requirements()
-
+    # 如果要保存包含检测结果的图片，需要在detect方法里面传入save_img=True
     with torch.no_grad():
         if opt.update:  # update all models (to fix SourceChangeWarning)
             for opt.weights in ['yolov5s.pt', 'yolov5m.pt', 'yolov5l.pt', 'yolov5x.pt']:
                 detect()
                 strip_optimizer(opt.weights)
         else:
-            detect()
+            detect(save_img=True)

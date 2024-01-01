@@ -17,7 +17,7 @@ sys.path.append('../')
 from config import cfg
 
 BATCH_SIZE = 64
-NUM_PROCESS = 8
+NUM_PROCESS = 1
 def chunks(l):
     return [l[i:i+BATCH_SIZE] for i in range(0, len(l), BATCH_SIZE)]
 
@@ -29,6 +29,7 @@ class ReidFeature():
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
         self.model, self.reid_cfg = build_reid_model(_mcmt_cfg)
         device = torch.device('cuda')
+        print('device: ', device)
         self.model = self.model.to(device)
         self.model.eval()
         mean = [0.485, 0.456, 0.406]
@@ -72,7 +73,7 @@ def init_worker(gpu_id, _cfg):
 
     # pylint: disable=global-variable-undefined
     global model
-    model = ReidFeature(gpu_id.get(), _cfg)
+    model = ReidFeature(gpu_id, _cfg)
 
 
 def process_input_by_worker_process(image_path_list):
@@ -113,6 +114,7 @@ def save_feature(output_path, data_path, pool_output):
         for image_path, feat in sample_dic.items():
             cam = image_path.split('/')[-3]
             image_name = image_path.split('/')[-1].split('.')[0]
+            print('image_name: ', image_name)
             all_feat_dic[cam][image_name]['feat'] = feat
     for cam, feat_dic in all_feat_dic.items():
         if not os.path.isdir(os.path.join(output_path, cam)):
@@ -149,7 +151,28 @@ def extract_image_feat(_cfg):
     print('%.4f s' % (time.time() - start_time))
 
     save_feature(_cfg.DATA_DIR, _cfg.DET_IMG_DIR, pool_output)
+    
+def extract_image_feat_no_multiprocessing(_cfg):
+    """Extract reid feat for each image, no using multiprocessing."""
+    # 返回所有需要reid的图片路径，包括所有版本的
+    image_list = load_all_data(_cfg.DET_IMG_DIR)
+    chunk_list = chunks(image_list)
+    init_worker(GPU_ID, _cfg)
+    start_time = time.time()
+    # [number, image_path, feat]
+    output = []
+    for i,chunk in enumerate(chunk_list):
+        result = process_input_by_worker_process(chunk)
+        output.append(result)
+        print('%d,done.' % i)
+    # output = list(process_input_by_worker_process(image_list))
+    # global model
+    # model = ReidFeature(0)
+    # for sub_list in chunk_list:
+    #     ret = process_input_by_worker_process(sub_list)
+    print('%.4f s' % (time.time() - start_time))
 
+    save_feature(_cfg.DATA_DIR, _cfg.DET_IMG_DIR, output)
 
 def debug_reid_feat(_cfg):
     """Debug reid feature to make sure the same with Track2."""
@@ -161,11 +184,12 @@ def debug_reid_feat(_cfg):
 
 def main():
     """Main method."""
-
     cfg.merge_from_file(f'../config/{sys.argv[1]}')
     cfg.freeze()
+    global GPU_ID
+    GPU_ID = 0
     # debug_reid_feat(cfg)
-    extract_image_feat(cfg)
+    extract_image_feat_no_multiprocessing(cfg)
 
 
 if __name__ == "__main__":

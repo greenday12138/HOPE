@@ -3,6 +3,7 @@
 import logging
 import math
 import os
+import psutil
 import subprocess
 import time
 from contextlib import contextmanager
@@ -33,6 +34,21 @@ def torch_distributed_zero_first(local_rank: int):
     if local_rank == 0:
         torch.distributed.barrier()
 
+def getModelSize(model):
+    param_size = 0
+    param_sum = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+        param_sum += param.nelement()
+    buffer_size = 0
+    buffer_sum = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+        buffer_sum += buffer.nelement()
+    all_size = (param_size + buffer_size) / 1024 / 1024
+    print('模型总大小为：{:.3f}MB'.format(all_size))
+    return (param_size, param_sum, buffer_size, buffer_sum, all_size)
+
 
 def init_torch_seeds(seed=0):
     # Speed-reproducibility tradeoff https://pytorch.org/docs/stable/notes/randomness.html
@@ -52,6 +68,7 @@ def git_describe():
 
 
 def select_device(device='', batch_size=None):
+    print('device, batch_size: ', device, batch_size)
     # device = 'cpu' or '0' or '0,1,2,3'
     s = f'YOLOv5 {git_describe()} torch {torch.__version__} '  # string
     cpu = device.lower() == 'cpu'
@@ -72,9 +89,10 @@ def select_device(device='', batch_size=None):
             s += f"{'' if i == 0 else space}CUDA:{d} ({p.name}, {p.total_memory / 1024 ** 2}MB)\n"  # bytes to MB
     else:
         s += 'CPU\n'
-
-    logger.info(s)  # skip a line
-    return torch.device('cuda:0' if cuda else 'cpu')
+    print('device, batch_size: ', device, batch_size)
+    # logger.info(s)  # skip a line
+    # 修改了cuda设备的索引
+    return torch.device('cuda' if cuda else 'cpu')
 
 
 def time_synchronized():
@@ -125,6 +143,50 @@ def profile(x, ops, n=100, device=None):
 
 def is_parallel(model):
     return type(model) in (nn.parallel.DataParallel, nn.parallel.DistributedDataParallel)
+
+
+
+
+def get_gpu_mem_info(gpu_id=0):
+    """
+    根据显卡 id 获取显存使用信息, 单位 MB
+    :param gpu_id: 显卡 ID
+    :return: total 所有的显存，used 当前使用的显存, free 可使用的显存
+    """
+    import pynvml
+    pynvml.nvmlInit()
+    if gpu_id < 0 or gpu_id >= pynvml.nvmlDeviceGetCount():
+        print(r'gpu_id {} 对应的显卡不存在!'.format(gpu_id))
+        return 0, 0, 0
+
+    handler = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
+    meminfo = pynvml.nvmlDeviceGetMemoryInfo(handler)
+    total = round(meminfo.total / 1024 / 1024, 2)
+    used = round(meminfo.used / 1024 / 1024, 2)
+    free = round(meminfo.free / 1024 / 1024, 2)
+    return total, used, free
+
+
+def get_cpu_mem_info():
+    """
+    获取当前机器的内存信息, 单位 MB
+    :return: mem_total 当前机器所有的内存 mem_free 当前机器可用的内存 mem_process_used 当前进程使用的内存
+    """
+    mem_total = round(psutil.virtual_memory().total / 1024 / 1024, 2)
+    mem_free = round(psutil.virtual_memory().available / 1024 / 1024, 2)
+    mem_process_used = round(psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024, 2)
+    return mem_total, mem_free, mem_process_used
+
+
+# if __name__ == "__main__":
+
+#     gpu_mem_total, gpu_mem_used, gpu_mem_free = get_gpu_mem_info(gpu_id=0)
+#     print(r'当前显卡显存使用情况：总共 {} MB， 已经使用 {} MB， 剩余 {} MB'
+#           .format(gpu_mem_total, gpu_mem_used, gpu_mem_free))
+
+#     cpu_mem_total, cpu_mem_free, cpu_mem_process_used = get_cpu_mem_info()
+#     print(r'当前机器内存使用情况：总共 {} MB， 剩余 {} MB, 当前进程使用的内存 {} MB'
+#           .format(cpu_mem_total, cpu_mem_free, cpu_mem_process_used))
 
 
 def intersect_dicts(da, db, exclude=()):

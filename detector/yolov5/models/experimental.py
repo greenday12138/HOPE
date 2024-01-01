@@ -6,6 +6,7 @@ import torch.nn as nn
 
 from models.common import Conv, DWConv
 from utils.google_utils import attempt_download
+from utils.torch_utils import get_gpu_mem_info, get_cpu_mem_info, getModelSize
 
 
 class CrossConv(nn.Module):
@@ -114,8 +115,11 @@ def attempt_load(weights, map_location=None):
     # Loads an ensemble of models weights=[a,b,c] or a single model weights=[a] or weights=a
     model = Ensemble()
     for w in weights if isinstance(weights, list) else [weights]:
-        attempt_download(w)
-        model.append(torch.load(w, map_location=map_location)['model'].float().fuse().eval())  # load FP32 model
+        print('w: weights: ', w)
+        # attempt_download(w)
+        Yolo_path='/mnt/c/Users/83725/Desktop/AIC21-MTMC/detector/yolov5/'
+        weight = Yolo_path + w 
+        model.append(torch.load(weight, map_location=map_location)['model'].float().fuse().eval())  # load FP32 model
 
     # Compatibility updates
     for m in model.modules():
@@ -123,7 +127,7 @@ def attempt_load(weights, map_location=None):
             m.inplace = True  # pytorch 1.7.0 compatibility
         elif type(m) is Conv:
             m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatibility
-
+    print('len(model), size(model)', len(model), getModelSize(model[-1]))
     if len(model) == 1:
         return model[-1]  # return model
     else:

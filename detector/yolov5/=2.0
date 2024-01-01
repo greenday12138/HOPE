@@ -1,0 +1,17 @@
+Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple
+Collecting pycocotools
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/27/37/9a47974f4176d10d5304ead7f4c1ddf6e4148405d4e4c5414c4c68967295/pycocotools-2.0.7-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (403 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 403.3/403.3 kB 3.3 MB/s eta 0:00:00
+Requirement already satisfied: matplotlib>=2.1.0 in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from pycocotools) (3.5.3)
+Requirement already satisfied: numpy in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from pycocotools) (1.18.4)
+Requirement already satisfied: packaging>=20.0 in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from matplotlib>=2.1.0->pycocotools) (21.3)
+Requirement already satisfied: pyparsing>=2.2.1 in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from matplotlib>=2.1.0->pycocotools) (3.0.9)
+Requirement already satisfied: python-dateutil>=2.7 in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from matplotlib>=2.1.0->pycocotools) (2.8.2)
+Requirement already satisfied: pillow>=6.2.0 in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from matplotlib>=2.1.0->pycocotools) (9.2.0)
+Requirement already satisfied: cycler>=0.10 in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from matplotlib>=2.1.0->pycocotools) (0.11.0)
+Requirement already satisfied: kiwisolver>=1.0.1 in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from matplotlib>=2.1.0->pycocotools) (1.4.4)
+Requirement already satisfied: fonttools>=4.22.0 in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from matplotlib>=2.1.0->pycocotools) (4.37.1)
+Requirement already satisfied: typing-extensions in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from kiwisolver>=1.0.1->matplotlib>=2.1.0->pycocotools) (4.3.0)
+Requirement already satisfied: six>=1.5 in /home/xiayuyang/anaconda3/envs/python37/lib/python3.7/site-packages (from python-dateutil>=2.7->matplotlib>=2.1.0->pycocotools) (1.16.0)
+Installing collected packages: pycocotools
+Successfully installed pycocotools-2.0.7

@@ -1,19 +1,23 @@
 MCMT_CONFIG_FILE="aic_all.yml"
 #### Run Detector.####
-cd detector/
+# 视频转成图片
+cd detector
 python gen_images_aic.py ${MCMT_CONFIG_FILE}
 
-cd yolov5/
+# 得到检测框
+cd yolov5
 sh gen_det.sh ${MCMT_CONFIG_FILE}
 
 #### Extract reid feautres.####
+# 对每个检测框的图片进行编码
 cd ../../reid/
-python extract_image_feat.py "aic_reid1.yml"
-python extract_image_feat.py "aic_reid2.yml"
-python extract_image_feat.py "aic_reid3.yml"
-python merge_reid_feat.py ${MCMT_CONFIG_FILE}
+python3 extract_image_feat.py "aic_reid1.yml"
+python3 extract_image_feat.py "aic_reid2.yml"
+python3 extract_image_feat.py "aic_reid3.yml"
+python3 merge_reid_feat.py ${MCMT_CONFIG_FILE}
 
 #### MOT. ####
+# 单视频目标追踪
 cd ../tracker/MOTBaseline
 sh run_aic.sh ${MCMT_CONFIG_FILE}
 wait
