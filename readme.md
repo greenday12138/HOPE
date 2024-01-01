@@ -1,4 +1,9 @@
-# [City-Scale Multi-Camera Vehicle Tracking Guided by Crossroad Zones](https://arxiv.org/pdf/2105.06623.pdf)
+# [Online MCMT]
+
+# 轨迹检测py文件路径：detector/yolov5/my_mcmt.py
+
+
+
 
 ## Requirements
 
